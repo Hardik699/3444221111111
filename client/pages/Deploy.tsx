@@ -14,7 +14,10 @@ export default function DeployPage() {
 
   const checkDb = async () => {
     // Avoid noisy network errors when running inside Builder preview iframe
-    if (typeof window !== "undefined" && /builder\.codes|builder\.io/.test(window.location.hostname)) {
+    if (
+      typeof window !== "undefined" &&
+      /builder\.codes|builder\.io/.test(window.location.hostname)
+    ) {
       // set to unknown and skip network calls in preview
       setDbStatus((prev) => (prev === "unknown" ? "unknown" : prev));
       return;
@@ -31,7 +34,10 @@ export default function DeployPage() {
     try {
       // @ts-ignore - import.meta may be undefined in some environments
       const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
-      if (apiOrigin) candidates.push(`${String(apiOrigin).replace(/\/$/, "")}/api/db/health`);
+      if (apiOrigin)
+        candidates.push(
+          `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+        );
     } catch {}
     candidates.push(`${window.location.origin}/api/db/health`);
     candidates.push(`http://localhost:8080/api/db/health`);
@@ -39,7 +45,10 @@ export default function DeployPage() {
     let ok = false;
     for (const url of candidates) {
       try {
-        const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+        const r = (await Promise.race([
+          fetch(url),
+          timeoutPromise,
+        ])) as Response;
         if (r && r.ok) {
           const j = await r.json().catch(() => null);
           setDbStatus(j?.connected ? "online" : "offline");

@@ -110,7 +110,10 @@ export default function AppNav() {
     let intervalId: number;
     const check = async () => {
       // Skip network checks when running inside Builder preview iframe to avoid Failed to fetch errors
-      if (typeof window !== "undefined" && /builder\.codes|builder\.io/.test(window.location.hostname)) {
+      if (
+        typeof window !== "undefined" &&
+        /builder\.codes|builder\.io/.test(window.location.hostname)
+      ) {
         return;
       }
 
@@ -123,7 +126,10 @@ export default function AppNav() {
       try {
         // @ts-ignore
         const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
-        if (apiOrigin) candidates.push(`${String(apiOrigin).replace(/\/$/, "")}/api/db/health`);
+        if (apiOrigin)
+          candidates.push(
+            `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+          );
       } catch {}
       candidates.push(`${window.location.origin}/api/db/health`);
       candidates.push(`http://localhost:8080/api/db/health`);
@@ -131,7 +137,10 @@ export default function AppNav() {
       let ok = false;
       for (const url of candidates) {
         try {
-          const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+          const r = (await Promise.race([
+            fetch(url),
+            timeoutPromise,
+          ])) as Response;
           if (!r || !r.ok) {
             // try next
             continue;
@@ -244,14 +253,20 @@ export default function AppNav() {
     try {
       // @ts-ignore
       const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
-      if (apiOrigin) candidates.push(`${String(apiOrigin).replace(/\/$/, "")}/api/db/health`);
+      if (apiOrigin)
+        candidates.push(
+          `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+        );
     } catch {}
     candidates.push(`${window.location.origin}/api/db/health`);
     candidates.push(`http://localhost:8080/api/db/health`);
 
     for (const url of candidates) {
       try {
-        const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+        const r = (await Promise.race([
+          fetch(url),
+          timeoutPromise,
+        ])) as Response;
         if (!r || !r.ok) continue;
         const j = await r.json().catch(() => null);
         if (j?.connected) alert("Database connected");
