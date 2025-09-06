@@ -109,25 +109,25 @@ export default function AppNav() {
     let cancelled = false;
     let intervalId: number;
     const check = async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
       const url = `${window.location.origin}/api/db/health`;
+      const timeoutMs = 5000;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), timeoutMs),
+      );
       try {
-        const r = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (!r.ok) {
+        const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+        if (!r || !r.ok) {
           const text = await r.text().catch(() => "");
           if (!cancelled) setDbStatus("offline");
-          console.debug("DB health check non-ok", r.status, text);
+          console.debug("DB health check non-ok", r?.status, text);
           return;
         }
         const j = await r.json().catch(() => null);
         if (!cancelled) setDbStatus(j?.connected ? "online" : "offline");
       } catch (err: any) {
-        clearTimeout(timeout);
         if (!cancelled) setDbStatus("offline");
-        if (err?.name === "AbortError") {
-          console.debug("DB health check aborted");
+        if (err?.message === "timeout") {
+          console.debug("DB health check timed out");
         } else if (err instanceof TypeError) {
           console.debug("DB health check failed (network/CORS)", err?.message || err);
         } else {
