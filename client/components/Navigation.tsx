@@ -107,44 +107,65 @@ export default function AppNav() {
   // DB health check
   useEffect(() => {
     let cancelled = false;
-    const check = () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const url = `${window.location.origin}/api/db/health`;
-      fetch(url, { signal: controller.signal })
-        .then((r) => {
-          clearTimeout(timeout);
-          if (!r.ok) {
-            return r
-              .text()
-              .catch(() => "")
-              .then((text) => {
-                if (!cancelled) setDbStatus("offline");
-                console.debug("DB health check non-ok", r.status, text);
-              });
+    let intervalId: number;
+    const check = async () => {
+      // Skip network checks when running inside Builder preview iframe to avoid Failed to fetch errors
+      if (
+        typeof window !== "undefined" &&
+        /builder\.codes|builder\.io/.test(window.location.hostname)
+      ) {
+        return;
+      }
+
+      const timeoutMs = 5000;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), timeoutMs),
+      );
+
+      const candidates: string[] = [];
+      try {
+        // @ts-ignore
+        const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
+        if (apiOrigin)
+          candidates.push(
+            `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+          );
+      } catch {}
+      candidates.push(`${window.location.origin}/api/db/health`);
+      candidates.push(`http://localhost:8080/api/db/health`);
+
+      let ok = false;
+      for (const url of candidates) {
+        try {
+          const r = (await Promise.race([
+            fetch(url),
+            timeoutPromise,
+          ])) as Response;
+          if (!r || !r.ok) {
+            // try next
+            continue;
           }
-          return r
-            .json()
-            .catch(() => null)
-            .then((j) => {
-              if (!cancelled) setDbStatus(j?.connected ? "online" : "offline");
-            });
-        })
-        .catch((err) => {
-          clearTimeout(timeout);
+          const j = await r.json().catch(() => null);
+          if (!cancelled) setDbStatus(j?.connected ? "online" : "offline");
+          ok = true;
+          break;
+        } catch (err: any) {
           if (!cancelled) setDbStatus("offline");
-          console.debug("DB health check failed (caught)", err?.message || err);
-        });
+          // continue to next candidate
+        }
+      }
+
+      if (!ok && !cancelled) setDbStatus("offline");
     };
     try {
       check();
     } catch (err) {
       console.debug("DB health check sync error", err);
     }
-    const id = setInterval(check, 60 * 1000);
+    intervalId = window.setInterval(check, 60 * 1000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -223,25 +244,44 @@ export default function AppNav() {
   };
 
   const dbHealth = async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const url = `${window.location.origin}/api/db/health`;
-    fetch(url, { signal: controller.signal })
-      .then(async (r) => {
-        clearTimeout(timeout);
-        if (!r.ok) {
-          const txt = await r.text().catch(() => "");
-          alert(`Database check failed: HTTP ${r.status} ${txt}`);
-          return;
-        }
+    const timeoutMs = 5000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs),
+    );
+
+    const candidates: string[] = [];
+    try {
+      // @ts-ignore
+      const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
+      if (apiOrigin)
+        candidates.push(
+          `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+        );
+    } catch {}
+    candidates.push(`${window.location.origin}/api/db/health`);
+    candidates.push(`http://localhost:8080/api/db/health`);
+
+    for (const url of candidates) {
+      try {
+        const r = (await Promise.race([
+          fetch(url),
+          timeoutPromise,
+        ])) as Response;
+        if (!r || !r.ok) continue;
         const j = await r.json().catch(() => null);
         if (j?.connected) alert("Database connected");
         else alert(`Database offline: ${j?.reason || j?.error || "Unknown"}`);
-      })
-      .catch((e) => {
-        clearTimeout(timeout);
-        alert(`Database check failed: ${e?.message || "Network error"}`);
-      });
+        return;
+      } catch (e: any) {
+        if (e?.message === "timeout") {
+          // try next
+        } else {
+          // try next
+        }
+      }
+    }
+
+    alert("Database check failed: Network or CORS error");
   };
 
   return (

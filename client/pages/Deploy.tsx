@@ -12,28 +12,61 @@ export default function DeployPage() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const checkDb = () => {
+  const checkDb = async () => {
+    // Avoid noisy network errors when running inside Builder preview iframe
+    if (
+      typeof window !== "undefined" &&
+      /builder\.codes|builder\.io/.test(window.location.hostname)
+    ) {
+      // set to unknown and skip network calls in preview
+      setDbStatus((prev) => (prev === "unknown" ? "unknown" : prev));
+      return;
+    }
+
     setChecking(true);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const url = `${window.location.origin}/api/db/health`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => {
-        clearTimeout(timeout);
-        if (!r.ok) {
-          setDbStatus("offline");
-          return;
+    const timeoutMs = 5000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs),
+    );
+
+    const candidates: string[] = [];
+    // Allow overriding API origin at build time with VITE_API_ORIGIN
+    try {
+      // @ts-ignore - import.meta may be undefined in some environments
+      const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
+      if (apiOrigin)
+        candidates.push(
+          `${String(apiOrigin).replace(/\/$/, "")}/api/db/health`,
+        );
+    } catch {}
+    candidates.push(`${window.location.origin}/api/db/health`);
+    candidates.push(`http://localhost:8080/api/db/health`);
+
+    let ok = false;
+    for (const url of candidates) {
+      try {
+        const r = (await Promise.race([
+          fetch(url),
+          timeoutPromise,
+        ])) as Response;
+        if (r && r.ok) {
+          const j = await r.json().catch(() => null);
+          setDbStatus(j?.connected ? "online" : "offline");
+          ok = true;
+          break;
         }
-        return r
-          .json()
-          .catch(() => null)
-          .then((j) => setDbStatus(j?.connected ? "online" : "offline"));
-      })
-      .catch(() => {
-        clearTimeout(timeout);
-        setDbStatus("offline");
-      })
-      .finally(() => setChecking(false));
+      } catch (err: any) {
+        // try next candidate
+        if (err?.message === "timeout") {
+          // continue
+        } else {
+          // network/CORS/etc - continue to next candidate
+        }
+      }
+    }
+
+    if (!ok) setDbStatus("offline");
+    setChecking(false);
   };
 
   useEffect(() => {
