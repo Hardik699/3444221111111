@@ -109,37 +109,39 @@ export default function AppNav() {
     let cancelled = false;
     let intervalId: number;
     const check = async () => {
-      const url = `${window.location.origin}/api/db/health`;
       const timeoutMs = 5000;
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("timeout")), timeoutMs),
       );
+
+      const candidates: string[] = [];
       try {
-        const r = (await Promise.race([
-          fetch(url),
-          timeoutPromise,
-        ])) as Response;
-        if (!r || !r.ok) {
-          const text = await r.text().catch(() => "");
+        // @ts-ignore
+        const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
+        if (apiOrigin) candidates.push(`${String(apiOrigin).replace(/\/$/, "")}/api/db/health`);
+      } catch {}
+      candidates.push(`${window.location.origin}/api/db/health`);
+      candidates.push(`http://localhost:8080/api/db/health`);
+
+      let ok = false;
+      for (const url of candidates) {
+        try {
+          const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+          if (!r || !r.ok) {
+            // try next
+            continue;
+          }
+          const j = await r.json().catch(() => null);
+          if (!cancelled) setDbStatus(j?.connected ? "online" : "offline");
+          ok = true;
+          break;
+        } catch (err: any) {
           if (!cancelled) setDbStatus("offline");
-          console.debug("DB health check non-ok", r?.status, text);
-          return;
-        }
-        const j = await r.json().catch(() => null);
-        if (!cancelled) setDbStatus(j?.connected ? "online" : "offline");
-      } catch (err: any) {
-        if (!cancelled) setDbStatus("offline");
-        if (err?.message === "timeout") {
-          console.debug("DB health check timed out");
-        } else if (err instanceof TypeError) {
-          console.debug(
-            "DB health check failed (network/CORS)",
-            err?.message || err,
-          );
-        } else {
-          console.error("DB health check failed:", err);
+          // continue to next candidate
         }
       }
+
+      if (!ok && !cancelled) setDbStatus("offline");
     };
     try {
       check();
@@ -228,29 +230,38 @@ export default function AppNav() {
   };
 
   const dbHealth = async () => {
-    const url = `${window.location.origin}/api/db/health`;
     const timeoutMs = 5000;
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("timeout")), timeoutMs),
     );
+
+    const candidates: string[] = [];
     try {
-      const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
-      if (!r.ok) {
-        const txt = await r.text().catch(() => "");
-        alert(`Database check failed: HTTP ${r.status} ${txt}`);
+      // @ts-ignore
+      const apiOrigin = import.meta?.env?.VITE_API_ORIGIN;
+      if (apiOrigin) candidates.push(`${String(apiOrigin).replace(/\/$/, "")}/api/db/health`);
+    } catch {}
+    candidates.push(`${window.location.origin}/api/db/health`);
+    candidates.push(`http://localhost:8080/api/db/health`);
+
+    for (const url of candidates) {
+      try {
+        const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+        if (!r || !r.ok) continue;
+        const j = await r.json().catch(() => null);
+        if (j?.connected) alert("Database connected");
+        else alert(`Database offline: ${j?.reason || j?.error || "Unknown"}`);
         return;
-      }
-      const j = await r.json().catch(() => null);
-      if (j?.connected) alert("Database connected");
-      else alert(`Database offline: ${j?.reason || j?.error || "Unknown"}`);
-    } catch (e: any) {
-      if (e?.message === "timeout") {
-        alert("Database check timed out");
-      } else {
-        console.debug("DB health check failed (caught)", e?.message || e);
-        alert(`Database check failed: ${e?.message || "Network error"}`);
+      } catch (e: any) {
+        if (e?.message === "timeout") {
+          // try next
+        } else {
+          // try next
+        }
       }
     }
+
+    alert("Database check failed: Network or CORS error");
   };
 
   return (
