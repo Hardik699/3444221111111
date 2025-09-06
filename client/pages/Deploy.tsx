@@ -12,28 +12,32 @@ export default function DeployPage() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const checkDb = () => {
+  const checkDb = async () => {
     setChecking(true);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     const url = `${window.location.origin}/api/db/health`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => {
-        clearTimeout(timeout);
-        if (!r.ok) {
-          setDbStatus("offline");
-          return;
-        }
-        return r
-          .json()
-          .catch(() => null)
-          .then((j) => setDbStatus(j?.connected ? "online" : "offline"));
-      })
-      .catch(() => {
-        clearTimeout(timeout);
+    try {
+      const r = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!r.ok) {
         setDbStatus("offline");
-      })
-      .finally(() => setChecking(false));
+        return;
+      }
+      const j = await r.json().catch(() => null);
+      setDbStatus(j?.connected ? "online" : "offline");
+    } catch (err: any) {
+      clearTimeout(timeout);
+      // Ignore noisy AbortError without flooding logs
+      if (err?.name === "AbortError") {
+        setDbStatus("offline");
+      } else {
+        console.error("DB health check failed:", err);
+        setDbStatus("offline");
+      }
+    } finally {
+      setChecking(false);
+    }
   };
 
   useEffect(() => {
