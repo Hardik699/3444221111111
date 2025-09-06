@@ -109,6 +109,11 @@ export default function AppNav() {
     let cancelled = false;
     let intervalId: number;
     const check = async () => {
+      // Skip network checks when running inside Builder preview iframe to avoid Failed to fetch errors
+      if (typeof window !== "undefined" && /builder\.codes|builder\.io/.test(window.location.hostname)) {
+        return;
+      }
+
       const timeoutMs = 5000;
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("timeout")), timeoutMs),
