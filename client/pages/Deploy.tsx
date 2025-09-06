@@ -14,22 +14,22 @@ export default function DeployPage() {
 
   const checkDb = async () => {
     setChecking(true);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     const url = `${window.location.origin}/api/db/health`;
+    const timeoutMs = 5000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs),
+    );
     try {
-      const r = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (!r.ok) {
+      const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+      if (!r || !r.ok) {
         setDbStatus("offline");
         return;
       }
       const j = await r.json().catch(() => null);
       setDbStatus(j?.connected ? "online" : "offline");
     } catch (err: any) {
-      clearTimeout(timeout);
-      // Ignore noisy AbortError without flooding logs
-      if (err?.name === "AbortError") {
+      if (err?.message === "timeout") {
+        // treat timeout as offline without throwing AbortError
         setDbStatus("offline");
       } else {
         console.error("DB health check failed:", err);
