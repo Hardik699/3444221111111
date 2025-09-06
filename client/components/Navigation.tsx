@@ -222,12 +222,13 @@ export default function AppNav() {
   };
 
   const dbHealth = async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     const url = `${window.location.origin}/api/db/health`;
+    const timeoutMs = 5000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs),
+    );
     try {
-      const r = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
+      const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
       if (!r.ok) {
         const txt = await r.text().catch(() => "");
         alert(`Database check failed: HTTP ${r.status} ${txt}`);
@@ -237,8 +238,7 @@ export default function AppNav() {
       if (j?.connected) alert("Database connected");
       else alert(`Database offline: ${j?.reason || j?.error || "Unknown"}`);
     } catch (e: any) {
-      clearTimeout(timeout);
-      if (e?.name === "AbortError") {
+      if (e?.message === "timeout") {
         alert("Database check timed out");
       } else {
         console.debug("DB health check failed (caught)", e?.message || e);
