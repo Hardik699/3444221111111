@@ -115,7 +115,10 @@ export default function AppNav() {
         setTimeout(() => reject(new Error("timeout")), timeoutMs),
       );
       try {
-        const r = (await Promise.race([fetch(url), timeoutPromise])) as Response;
+        const r = (await Promise.race([
+          fetch(url),
+          timeoutPromise,
+        ])) as Response;
         if (!r || !r.ok) {
           const text = await r.text().catch(() => "");
           if (!cancelled) setDbStatus("offline");
@@ -129,7 +132,10 @@ export default function AppNav() {
         if (err?.message === "timeout") {
           console.debug("DB health check timed out");
         } else if (err instanceof TypeError) {
-          console.debug("DB health check failed (network/CORS)", err?.message || err);
+          console.debug(
+            "DB health check failed (network/CORS)",
+            err?.message || err,
+          );
         } else {
           console.error("DB health check failed:", err);
         }
