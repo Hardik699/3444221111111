@@ -13,6 +13,13 @@ export default function DeployPage() {
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const checkDb = async () => {
+    // Avoid noisy network errors when running inside Builder preview iframe
+    if (typeof window !== "undefined" && /builder\.codes|builder\.io/.test(window.location.hostname)) {
+      // set to unknown and skip network calls in preview
+      setDbStatus((prev) => (prev === "unknown" ? "unknown" : prev));
+      return;
+    }
+
     setChecking(true);
     const timeoutMs = 5000;
     const timeoutPromise = new Promise<never>((_, reject) =>
